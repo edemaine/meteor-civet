@@ -1,0 +1,4 @@
+export civetAnswer := 42
+
+export function civetAdd(a, b)
+  a + b
