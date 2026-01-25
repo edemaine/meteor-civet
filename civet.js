@@ -10,21 +10,21 @@ const Module = require('module');
 const { Babel, BabelCompiler } = require('meteor/babel-compiler');
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map');
 
-let Civet;
+let Civet, CivetError;
 const moduleName = '@danielx/civet';
-const missingCivetError = `
-ERROR: edemaine:civet is missing the peer NPM dependency ${moduleName}
-ERROR: Install it in your app via: meteor npm install --save-dev ${moduleName}
-ERROR: Then restart meteor
-`;
 
 Plugin.registerCompiler({
   extensions: ['civet']
 }, () => {
+  // Resolve peer NPM dependency relative to the app's package.json,
+  // which is generally assumed to be in the current working directory; see
+  // https://github.com/meteor/meteor/blob/devel/packages/babel-compiler/babel-compiler.js
   const appRequire = createRequire(path.join(process.cwd(), 'package.json'));
   try {
     Civet = appRequire(moduleName);
   } catch (error) {
+    // Meteor 2 uses an older Node.js that does not support modern JS syntax
+    // used by Civet, such as `??=`. In this case, transpile Civet with Babel.
     if (error instanceof SyntaxError) {
       try {
         const resolvedPath = appRequire.resolve(moduleName);
@@ -34,6 +34,7 @@ Plugin.registerCompiler({
         });
         babelOptions.filename = resolvedPath;
         babelOptions.sourceMaps = false;
+        // Build module from transpiled code
         const compiled = Babel.compile(source, babelOptions);
         const compiledModule = new Module(resolvedPath, module.parent);
         compiledModule.filename = resolvedPath;
@@ -41,12 +42,17 @@ Plugin.registerCompiler({
         compiledModule._compile(compiled.code, resolvedPath);
         Civet = compiledModule.exports;
       } catch (transpileError) {
-        console.error(`Failed to transpile Civet with Babel: ${transpileError.message}`);
+        CivetError = `edemaine:civet failed to transpile Civet with Babel: ${transpileError.message}`
       }
     } else {
-      console.error(error.message + '\n' + missingCivetError);
+      CivetError = `${error.message}
+ERROR: edemaine:civet is missing the peer NPM dependency ${moduleName}
+ERROR: Install it in your app via: meteor npm install --save-dev ${moduleName}
+ERROR: Then restart meteor
+`;
     }
   }
+  if (CivetError) console.error(CivetError)
 
   return new CachedCivetCompiler();
 });
@@ -138,7 +144,7 @@ class CivetCompiler {
 
   compileOneFile(inputFile) {
     if (!Civet) {
-      inputFile.error({ message: missingCivetError });
+      inputFile.error({ message: CivetError });
       return null;
     }
 
