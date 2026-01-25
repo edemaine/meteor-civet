@@ -13,7 +13,6 @@ meteor npm install --save-dev @danielx/civet
 
 - Civet is a peer npm dependency so you control its version.
 - Compiled output is run through Meteor's Babel compiler for browser targets.
-- Uses `tmeasday:check-npm-versions` to warn about missing Civet installs.
 
 ## References
 

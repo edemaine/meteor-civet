@@ -8,18 +8,37 @@ const { createRequire } = require('module');
 const { BabelCompiler } = require('meteor/babel-compiler');
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map');
 
-Plugin.registerCompiler({
-  extensions: ['civet']
-}, () => new CachedCivetCompiler());
+let Civet
+const moduleName = '@danielx/civet'
+try {
+  const appRequire = createRequire(path.join(process.cwd(), 'package.json'))
+  Civet = appRequire(moduleName)
+} catch (error) {
+  console.warn(`
+${error.message}
+WARNING: edemaine:civet is missing the peer NPM dependency ${moduleName}
+WARNING: Install it in your app via: meteor npm install --save-dev ${moduleName}
+WARNING: Then restart meteor
+WARNING: Meanwhile, .civet files will not be compiled.
+`)
+}
+
+if (Civet) {
+  Plugin.registerCompiler({
+    extensions: ['civet']
+  }, () => {
+    return new CachedCivetCompiler();
+  });
+}
 
 class CachedCivetCompiler extends CachingCompiler {
-  constructor() {
+  constructor(options = {}) {
     super({
       compilerName: 'civet',
       defaultCacheSize: 1024 * 1024 * 10
     });
 
-    this.civetCompiler = new CivetCompiler();
+    this.civetCompiler = new CivetCompiler(options);
   }
 
   getCacheKey(inputFile) {
@@ -73,9 +92,6 @@ class CachedCivetCompiler extends CachingCompiler {
 
 class CivetCompiler {
   constructor() {
-    const { civet, error } = resolveCivet();
-    this.civet = civet;
-    this.civetError = error;
     this.babelCompiler = new BabelCompiler({
       runtime: false,
       react: true
@@ -83,7 +99,7 @@ class CivetCompiler {
   }
 
   getVersion() {
-    return this.civet && this.civet.version;
+    return Civet?.version;
   }
 
   outputFilePath(inputFile) {
@@ -101,17 +117,12 @@ class CivetCompiler {
   }
 
   compileOneFile(inputFile) {
-    if (this.civetError) {
-      inputFile.error({ message: this.civetError.message });
-      return null;
-    }
-
     const source = inputFile.getContentsAsString();
     const compileOptions = this.getCompileOptions(inputFile);
 
     let output;
     try {
-      output = this.civet.compile(source, compileOptions);
+      output = Civet?.compile(source, compileOptions);
     } catch (error) {
       this.reportCompileError(inputFile, error);
       return null;
@@ -189,7 +200,7 @@ class CivetCompiler {
   }
 
   reportCompileError(inputFile, error) {
-    if (this.civet && this.civet.isCompileError && this.civet.isCompileError(error)) {
+    if (Civet?.isCompileError?.(error)) {
       const firstError = Array.isArray(error.errors) ? error.errors[0] : error;
       const line = toNumber(firstError.line);
       const column = toNumber(firstError.column);
@@ -210,25 +221,4 @@ class CivetCompiler {
 function toNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
-}
-
-function resolveCivet() {
-  const moduleName = '@danielx/civet';
-
-  try {
-    const appRequire = createRequire(path.join(process.cwd(), 'package.json'));
-    const civetModule = appRequire(moduleName);
-    return { civet: civetModule.default || civetModule };
-  } catch (error) {
-    try {
-      const civetModule = require(moduleName);
-      return { civet: civetModule.default || civetModule };
-    } catch (fallbackError) {
-      const message = [
-        `Missing peer npm dependency "${moduleName}".`,
-        `Install it in your app with "meteor npm install --save-dev ${moduleName}".`
-      ].join(' ');
-      return { error: new Error(message) };
-    }
-  }
 }
