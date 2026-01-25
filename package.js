@@ -5,9 +5,9 @@ Package.describe({
 });
 
 Package.registerBuildPlugin({
-  name: 'compile-civet',
+  name: 'civet',
   use: ['caching-compiler', 'babel-compiler', 'ecmascript'],
-  sources: ['compile-civet.js'],
+  sources: ['civet.js'],
   npmDependencies: {
     'source-map': '0.5.7'
   }

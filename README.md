@@ -24,5 +24,6 @@ meteor npm install --save-dev @danielx/civet
 ## Test
 
 ```bash
+npm install
 meteor test-packages ./
 ```

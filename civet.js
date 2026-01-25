@@ -3,33 +3,53 @@
 // and the compiler plugin registration pattern:
 // https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript/compile-coffeescript.js
 
+const fs = require('fs');
 const path = require('path');
 const { createRequire } = require('module');
-const { BabelCompiler } = require('meteor/babel-compiler');
+const Module = require('module');
+const { Babel, BabelCompiler } = require('meteor/babel-compiler');
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map');
 
-let Civet
-const moduleName = '@danielx/civet'
-try {
-  const appRequire = createRequire(path.join(process.cwd(), 'package.json'))
-  Civet = appRequire(moduleName)
-} catch (error) {
-  console.warn(`
-${error.message}
-WARNING: edemaine:civet is missing the peer NPM dependency ${moduleName}
-WARNING: Install it in your app via: meteor npm install --save-dev ${moduleName}
-WARNING: Then restart meteor
-WARNING: Meanwhile, .civet files will not be compiled.
-`)
-}
+let Civet;
+const moduleName = '@danielx/civet';
+const missingCivetError = `
+ERROR: edemaine:civet is missing the peer NPM dependency ${moduleName}
+ERROR: Install it in your app via: meteor npm install --save-dev ${moduleName}
+ERROR: Then restart meteor
+`;
 
-if (Civet) {
-  Plugin.registerCompiler({
-    extensions: ['civet']
-  }, () => {
-    return new CachedCivetCompiler();
-  });
-}
+Plugin.registerCompiler({
+  extensions: ['civet']
+}, () => {
+  const appRequire = createRequire(path.join(process.cwd(), 'package.json'));
+  try {
+    Civet = appRequire(moduleName);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      try {
+        const resolvedPath = appRequire.resolve(moduleName);
+        const source = fs.readFileSync(resolvedPath, 'utf8');
+        const babelOptions = Babel.getDefaultOptions({
+          nodeMajorVersion: parseInt(process.versions.node, 10)
+        });
+        babelOptions.filename = resolvedPath;
+        babelOptions.sourceMaps = false;
+        const compiled = Babel.compile(source, babelOptions);
+        const compiledModule = new Module(resolvedPath, module.parent);
+        compiledModule.filename = resolvedPath;
+        compiledModule.paths = Module._nodeModulePaths(path.dirname(resolvedPath));
+        compiledModule._compile(compiled.code, resolvedPath);
+        Civet = compiledModule.exports;
+      } catch (transpileError) {
+        console.error(`Failed to transpile Civet with Babel: ${transpileError.message}`);
+      }
+    } else {
+      console.error(error.message + '\n' + missingCivetError);
+    }
+  }
+
+  return new CachedCivetCompiler();
+});
 
 class CachedCivetCompiler extends CachingCompiler {
   constructor(options = {}) {
@@ -117,12 +137,17 @@ class CivetCompiler {
   }
 
   compileOneFile(inputFile) {
+    if (!Civet) {
+      inputFile.error({ message: missingCivetError });
+      return null;
+    }
+
     const source = inputFile.getContentsAsString();
     const compileOptions = this.getCompileOptions(inputFile);
 
     let output;
     try {
-      output = Civet?.compile(source, compileOptions);
+      output = Civet.compile(source, compileOptions);
     } catch (error) {
       this.reportCompileError(inputFile, error);
       return null;
