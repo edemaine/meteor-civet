@@ -3,15 +3,15 @@
 // and the compiler plugin registration pattern:
 // https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript/compile-coffeescript.js
 
-const fs = require('fs');
-const path = require('path');
-const { createRequire } = require('module');
-const Module = require('module');
-const { Babel, BabelCompiler } = require('meteor/babel-compiler');
-const { SourceMapConsumer, SourceMapGenerator } = require('source-map');
+const fs = require('fs')
+const path = require('path')
+const { createRequire } = require('module')
+const Module = require('module')
+const { Babel, BabelCompiler } = require('meteor/babel-compiler')
+const { SourceMapConsumer, SourceMapGenerator } = require('source-map')
 
-let Civet, CivetError;
-const moduleName = '@danielx/civet';
+let Civet, CivetError
+const moduleName = '@danielx/civet'
 
 Plugin.registerCompiler({
   extensions: ['civet']
@@ -19,28 +19,28 @@ Plugin.registerCompiler({
   // Resolve peer NPM dependency relative to the app's package.json,
   // which is generally assumed to be in the current working directory; see
   // https://github.com/meteor/meteor/blob/devel/packages/babel-compiler/babel-compiler.js
-  const appRequire = createRequire(path.join(process.cwd(), 'package.json'));
+  const appRequire = createRequire(path.join(process.cwd(), 'package.json'))
   try {
-    Civet = appRequire(moduleName);
+    Civet = appRequire(moduleName)
   } catch (error) {
     // Meteor 2 uses an older Node.js that does not support modern JS syntax
     // used by Civet, such as `??=`. In this case, transpile Civet with Babel.
     if (error instanceof SyntaxError) {
       try {
-        const resolvedPath = appRequire.resolve(moduleName);
-        const source = fs.readFileSync(resolvedPath, 'utf8');
+        const resolvedPath = appRequire.resolve(moduleName)
+        const source = fs.readFileSync(resolvedPath, 'utf8')
         const babelOptions = Babel.getDefaultOptions({
           nodeMajorVersion: parseInt(process.versions.node, 10)
-        });
-        babelOptions.filename = resolvedPath;
-        babelOptions.sourceMaps = false;
+        })
+        babelOptions.filename = resolvedPath
+        babelOptions.sourceMaps = false
         // Build module from transpiled code
-        const compiled = Babel.compile(source, babelOptions);
-        const compiledModule = new Module(resolvedPath, module.parent);
-        compiledModule.filename = resolvedPath;
-        compiledModule.paths = Module._nodeModulePaths(path.dirname(resolvedPath));
-        compiledModule._compile(compiled.code, resolvedPath);
-        Civet = compiledModule.exports;
+        const compiled = Babel.compile(source, babelOptions)
+        const compiledModule = new Module(resolvedPath, module.parent)
+        compiledModule.filename = resolvedPath
+        compiledModule.paths = Module._nodeModulePaths(path.dirname(resolvedPath))
+        compiledModule._compile(compiled.code, resolvedPath)
+        Civet = compiledModule.exports
       } catch (transpileError) {
         CivetError = `edemaine:civet failed to transpile Civet with Babel: ${transpileError.message}`
       }
@@ -49,22 +49,22 @@ Plugin.registerCompiler({
 ERROR: edemaine:civet is missing the peer NPM dependency ${moduleName}
 ERROR: Install it in your app via: meteor npm install --save-dev ${moduleName}
 ERROR: Then restart meteor
-`;
+`
     }
   }
   if (CivetError) console.error(CivetError)
 
-  return new CachedCivetCompiler();
-});
+  return new CachedCivetCompiler()
+})
 
 class CachedCivetCompiler extends CachingCompiler {
   constructor(options = {}) {
     super({
       compilerName: 'civet',
       defaultCacheSize: 1024 * 1024 * 10
-    });
+    })
 
-    this.civetCompiler = new CivetCompiler(options);
+    this.civetCompiler = new CivetCompiler(options)
   }
 
   getCacheKey(inputFile) {
@@ -74,7 +74,7 @@ class CachedCivetCompiler extends CachingCompiler {
       inputFile.getDeclaredExports(),
       inputFile.getPathInPackage(),
       this.civetCompiler.getVersion()
-    ];
+    ]
   }
 
   compileOneFileLater(inputFile, getResult) {
@@ -83,21 +83,21 @@ class CachedCivetCompiler extends CachingCompiler {
       sourcePath: inputFile.getPathInPackage(),
       bare: inputFile.getFileOptions().bare
     }, async () => {
-      const result = await getResult();
+      const result = await getResult()
       return result && {
         data: result.source,
         sourceMap: result.sourceMap
-      };
-    });
+      }
+    })
   }
 
   compileOneFile(inputFile) {
-    return this.civetCompiler.compileOneFile(inputFile);
+    return this.civetCompiler.compileOneFile(inputFile)
   }
 
   setDiskCacheDirectory(cacheDir) {
-    this.civetCompiler.setDiskCacheDirectory(cacheDir);
-    return super.setDiskCacheDirectory(cacheDir);
+    this.civetCompiler.setDiskCacheDirectory(cacheDir)
+    return super.setDiskCacheDirectory(cacheDir)
   }
 
   addCompileResult(inputFile, sourceWithMap) {
@@ -107,12 +107,12 @@ class CachedCivetCompiler extends CachingCompiler {
       data: sourceWithMap.source,
       sourceMap: sourceWithMap.sourceMap,
       bare: inputFile.getFileOptions().bare
-    });
+    })
   }
 
   compileResultSize(sourceWithMap) {
     return sourceWithMap.source.length +
-      this.sourceMapSize(sourceWithMap.sourceMap);
+      this.sourceMapSize(sourceWithMap.sourceMap)
   }
 }
 
@@ -121,15 +121,15 @@ class CivetCompiler {
     this.babelCompiler = new BabelCompiler({
       runtime: false,
       react: true
-    });
+    })
   }
 
   getVersion() {
-    return Civet?.version;
+    return Civet?.version
   }
 
   outputFilePath(inputFile) {
-    return inputFile.getPathInPackage();
+    return inputFile.getPathInPackage()
   }
 
   getCompileOptions(inputFile) {
@@ -139,117 +139,117 @@ class CivetCompiler {
       sourceMap: true,
       js: true,
       sync: true
-    };
+    }
   }
 
   compileOneFile(inputFile) {
     if (!Civet) {
-      inputFile.error({ message: CivetError });
-      return null;
+      inputFile.error({ message: CivetError })
+      return null
     }
 
-    const source = inputFile.getContentsAsString();
-    const compileOptions = this.getCompileOptions(inputFile);
+    const source = inputFile.getContentsAsString()
+    const compileOptions = this.getCompileOptions(inputFile)
 
-    let output;
+    let output
     try {
-      output = Civet.compile(source, compileOptions);
+      output = Civet.compile(source, compileOptions)
     } catch (error) {
-      this.reportCompileError(inputFile, error);
-      return null;
+      this.reportCompileError(inputFile, error)
+      return null
     }
 
     if (!output) {
-      return null;
+      return null
     }
 
-    const compiledSource = typeof output === 'string' ? output : output.code;
+    const compiledSource = typeof output === 'string' ? output : output.code
     const civetSourceMap = typeof output === 'string'
       ? null
-      : this.renderSourceMap(output.sourceMap, inputFile, compileOptions);
+      : this.renderSourceMap(output.sourceMap, inputFile, compileOptions)
 
     const babelResult = this.babelCompiler.processOneFileForTarget(
       inputFile,
       compiledSource
-    );
+    )
 
     if (babelResult && babelResult.data != null) {
       const mergedSourceMap = this.mergeSourceMaps(
         babelResult.sourceMap,
         civetSourceMap,
         inputFile
-      );
+      )
       return {
         source: babelResult.data,
         sourceMap: mergedSourceMap
-      };
+      }
     }
 
     return {
       source: compiledSource,
       sourceMap: civetSourceMap
-    };
+    }
   }
 
   setDiskCacheDirectory(cacheDir) {
     if (this.babelCompiler && this.babelCompiler.setDiskCacheDirectory) {
-      this.babelCompiler.setDiskCacheDirectory(cacheDir);
+      this.babelCompiler.setDiskCacheDirectory(cacheDir)
     }
   }
 
   renderSourceMap(sourceMap, inputFile, compileOptions) {
     if (!sourceMap) {
-      return null;
+      return null
     }
 
     return sourceMap.json(
       inputFile.getDisplayPath(),
       compileOptions.outputFilename
-    );
+    )
   }
 
   mergeSourceMaps(babelSourceMap, civetSourceMap, inputFile) {
     if (!babelSourceMap) {
-      return civetSourceMap;
+      return civetSourceMap
     }
 
     if (!civetSourceMap) {
-      return babelSourceMap;
+      return babelSourceMap
     }
 
     const normalizedBabelMap = {
       ...babelSourceMap,
       sources: [...babelSourceMap.sources]
-    };
-    normalizedBabelMap.sources[0] = '/' + this.outputFilePath(inputFile);
+    }
+    normalizedBabelMap.sources[0] = '/' + this.outputFilePath(inputFile)
 
     const sourceMapGenerator = SourceMapGenerator.fromSourceMap(
       new SourceMapConsumer(normalizedBabelMap)
-    );
-    sourceMapGenerator.applySourceMap(new SourceMapConsumer(civetSourceMap));
-    return sourceMapGenerator.toJSON();
+    )
+    sourceMapGenerator.applySourceMap(new SourceMapConsumer(civetSourceMap))
+    return sourceMapGenerator.toJSON()
   }
 
   reportCompileError(inputFile, error) {
     if (Civet?.isCompileError?.(error)) {
-      const firstError = Array.isArray(error.errors) ? error.errors[0] : error;
-      const line = toNumber(firstError.line);
-      const column = toNumber(firstError.column);
+      const firstError = Array.isArray(error.errors) ? error.errors[0] : error
+      const line = toNumber(firstError.line)
+      const column = toNumber(firstError.column)
       inputFile.error({
         message: firstError.message || firstError.header || 'Civet compile error',
         line,
         column
-      });
-      return;
+      })
+      return
     }
 
     inputFile.error({
       message: error && error.message ? error.message : String(error)
-    });
+    })
   }
 }
 
 function toNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : undefined;
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
 }
