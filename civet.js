@@ -9,50 +9,73 @@ const { createRequire } = require('module')
 const Module = require('module')
 const { Babel, BabelCompiler } = require('meteor/babel-compiler')
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map')
+const { convertToOSPath } = Plugin
 
-let Civet, CivetError
-const moduleName = '@danielx/civet'
+// Resolve peer NPM dependency relative to the app's package.json,
+// which is generally assumed to be in the current working directory; see
+// https://github.com/meteor/meteor/blob/devel/packages/babel-compiler/babel-compiler.js
+const appRequire = createRequire(path.join(process.cwd(), 'package.json'))
 
-Plugin.registerCompiler({
-  extensions: ['civet']
-}, () => {
-  // Resolve peer NPM dependency relative to the app's package.json,
-  // which is generally assumed to be in the current working directory; see
-  // https://github.com/meteor/meteor/blob/devel/packages/babel-compiler/babel-compiler.js
-  const appRequire = createRequire(path.join(process.cwd(), 'package.json'))
+function peerRequire(name) {
   try {
-    Civet = appRequire(moduleName)
+    return { module: appRequire(name) }
   } catch (error) {
     // Meteor 2 uses an older Node.js that does not support modern JS syntax
-    // used by Civet, such as `??=`. In this case, transpile Civet with Babel.
+    // used by Civet, such as `??=`. In this case, transpile with Babel.
     if (error instanceof SyntaxError) {
       try {
-        const resolvedPath = appRequire.resolve(moduleName)
+        const resolvedPath = appRequire.resolve(name)
         const source = fs.readFileSync(resolvedPath, 'utf8')
         const babelOptions = Babel.getDefaultOptions({
           nodeMajorVersion: parseInt(process.versions.node, 10)
         })
         babelOptions.filename = resolvedPath
         babelOptions.sourceMaps = false
-        // Build module from transpiled code
         const compiled = Babel.compile(source, babelOptions)
+        // Build module from transpiled code
         const compiledModule = new Module(resolvedPath, module.parent)
         compiledModule.filename = resolvedPath
         compiledModule.paths = Module._nodeModulePaths(path.dirname(resolvedPath))
         compiledModule._compile(compiled.code, resolvedPath)
-        Civet = compiledModule.exports
+        return { module: compiledModule.exports }
       } catch (transpileError) {
-        CivetError = `edemaine:civet failed to transpile Civet with Babel: ${transpileError.message}`
+        return {
+          error: `edemaine:civet failed to transpile ${name} with Babel: ${transpileError.message}`
+        }
       }
-    } else {
-      CivetError = `${error.message}
-ERROR: edemaine:civet is missing the peer NPM dependency ${moduleName}
-ERROR: Install it in your app via: meteor npm install --save-dev ${moduleName}
+    }
+
+    if (name === civetName) {
+      return {
+        error: `${error.message}
+ERROR: edemaine:civet is missing the peer NPM dependency ${civetName}
+ERROR: Install it in your app via: meteor npm install --save-dev ${civetName}
 ERROR: Then restart meteor
 `
+      }
+    }
+
+    return {
+      error: `edemaine:civet failed to load ${name}: ${error.message}`
     }
   }
-  if (CivetError) console.error(CivetError)
+}
+
+let Civet, CivetConfig, CivetError
+const civetName = '@danielx/civet'
+
+Plugin.registerCompiler({
+  extensions: ['civet']
+}, () => {
+  ({module: Civet, error: CivetError} = peerRequire(civetName))
+
+  if (Civet) {
+    let error
+    ({module: CivetConfig, error} = peerRequire(`${civetName}/config`))
+    if (error) console.warn(`Failed to load ${civetName}/config: ${error}`)
+  } else {
+    console.error(CivetError)
+  }
 
   return new CachedCivetCompiler()
 })
@@ -73,8 +96,15 @@ class CachedCivetCompiler extends CachingCompiler {
       inputFile.getSourceHash(),
       inputFile.getDeclaredExports(),
       inputFile.getPathInPackage(),
-      this.civetCompiler.getVersion()
+      this.civetCompiler.getVersion(),
+      this.civetCompiler.getConfigCacheKey(inputFile)
     ]
+  }
+
+  async processFilesForTarget(inputFiles) {
+    await this.civetCompiler.updateConfigs(inputFiles)
+
+    return super.processFilesForTarget(inputFiles)
   }
 
   compileOneFileLater(inputFile, getResult) {
@@ -86,7 +116,7 @@ class CachedCivetCompiler extends CachingCompiler {
       const result = await getResult()
       return result && {
         data: result.source,
-        sourceMap: result.sourceMap
+        sourceMap: result.sourceMap,
       }
     })
   }
@@ -106,7 +136,7 @@ class CachedCivetCompiler extends CachingCompiler {
       sourcePath: inputFile.getPathInPackage(),
       data: sourceWithMap.source,
       sourceMap: sourceWithMap.sourceMap,
-      bare: inputFile.getFileOptions().bare
+      bare: inputFile.getFileOptions().bare,
     })
   }
 
@@ -122,6 +152,7 @@ class CivetCompiler {
       runtime: false,
       react: true
     })
+    this.configCache = new Map()
   }
 
   getVersion() {
@@ -133,18 +164,33 @@ class CivetCompiler {
   }
 
   getCompileOptions(inputFile) {
+    const configOptions = this.getConfigOptions(inputFile)
     return {
+      ...configOptions,
+      parseOptions: configOptions.parseOptions
+        ? { ...configOptions.parseOptions }
+        : undefined,
       filename: inputFile.getDisplayPath(),
       outputFilename: '/' + this.outputFilePath(inputFile),
       sourceMap: true,
       js: true,
-      sync: true
     }
   }
 
-  compileOneFile(inputFile) {
-    if (!Civet) {
+  async compileOneFile(inputFile) {
+    if (CivetError) {
       inputFile.error({ message: CivetError })
+      return null
+    }
+
+    const configError = this.getConfigError(inputFile)
+    if (configError) {
+      inputFile.error({ message: configError })
+      return null
+    }
+
+    if (this.configError) {
+      inputFile.error({ message: this.configError })
       return null
     }
 
@@ -153,24 +199,18 @@ class CivetCompiler {
 
     let output
     try {
-      output = Civet.compile(source, compileOptions)
+      output = await Civet.compile(source, compileOptions)
     } catch (error) {
       this.reportCompileError(inputFile, error)
       return null
     }
 
-    if (!output) {
-      return null
-    }
-
-    const compiledSource = typeof output === 'string' ? output : output.code
-    const civetSourceMap = typeof output === 'string'
-      ? null
-      : this.renderSourceMap(output.sourceMap, inputFile, compileOptions)
+    const civetSourceMap =
+      this.renderSourceMap(output.sourceMap, inputFile, compileOptions)
 
     const babelResult = this.babelCompiler.processOneFileForTarget(
       inputFile,
-      compiledSource
+      output.code,
     )
 
     if (babelResult && babelResult.data != null) {
@@ -186,8 +226,8 @@ class CivetCompiler {
     }
 
     return {
-      source: compiledSource,
-      sourceMap: civetSourceMap
+      source: output.code,
+      sourceMap: civetSourceMap,
     }
   }
 
@@ -238,7 +278,7 @@ class CivetCompiler {
       inputFile.error({
         message: firstError.message || firstError.header || 'Civet compile error',
         line,
-        column
+        column,
       })
       return
     }
@@ -246,6 +286,90 @@ class CivetCompiler {
     inputFile.error({
       message: error && error.message ? error.message : String(error)
     })
+  }
+
+  getConfigCacheKey(inputFile) {
+    const baseDir = this.getConfigBaseDir(inputFile)
+    const configEntry = this.configCache.get(baseDir)
+    return configEntry || null
+  }
+
+  getConfigOptions(inputFile) {
+    const configEntry = this.getConfigEntry(inputFile)
+    return configEntry.options || {}
+  }
+
+  getConfigError(inputFile) {
+    const configEntry = this.getConfigEntry(inputFile)
+    return configEntry.error
+  }
+
+  getConfigEntry(inputFile) {
+    const baseDir = this.getConfigBaseDir(inputFile)
+    return this.configCache.get(baseDir) || { options: {}, path: null, hash: null, error: null }
+  }
+
+  getConfigBaseDir(inputFile) {
+    const packageJsonPath = inputFile.findControlFile('package.json')
+    if (packageJsonPath) {
+      return convertToOSPath(Plugin.path.dirname(packageJsonPath))
+    }
+
+    const sourceRoot = inputFile.getSourceRoot(true)
+    if (sourceRoot) {
+      const sourcePath = Plugin.path.join(
+        sourceRoot,
+        inputFile.getPathInPackage()
+      )
+      return convertToOSPath(Plugin.path.dirname(sourcePath))
+    }
+
+    return process.cwd()
+  }
+
+  async updateConfigs(inputFiles) {
+    if (!CivetConfig || !CivetConfig.findInDir || !CivetConfig.loadConfig) return
+
+    // Load config for each unique base directory
+    const roots = new Set()
+    for (const inputFile of inputFiles) {
+      const baseDir = this.getConfigBaseDir(inputFile)
+      if (!roots.has(baseDir)) {
+        await this.updateConfig(baseDir, inputFile)
+        roots.add(baseDir)
+      }
+    }
+  }
+
+  async updateConfig(baseDir, inputFile) {
+    const configEntry = {
+      options: {},
+      path: null,
+      hash: null,
+      error: null,
+    }
+
+    let configPath
+    try {
+      configPath = await CivetConfig.findInDir(baseDir)
+    } catch (error) {
+      configEntry.error = `Error finding Civet config: ${error.message}`
+      this.configCache.set(baseDir, configEntry)
+      return
+    }
+
+    if (configPath) {
+      try {
+        const configFile = inputFile.readAndWatchFileWithHash(configPath)
+        configEntry.hash = configFile.hash
+        configEntry.path = configPath
+        configEntry.options = await CivetConfig.loadConfig(configPath)
+      } catch (error) {
+        configEntry.error = `Error loading Civet config ${configPath}: ${error.message}`
+      }
+    }
+
+    this.configCache.set(baseDir, configEntry)
   }
 }
 
