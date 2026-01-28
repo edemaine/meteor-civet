@@ -1,8 +1,3 @@
-// Based on Meteor's CoffeeScript compiler implementation:
-// https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript-compiler/coffeescript-compiler.js
-// and the compiler plugin registration pattern:
-// https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript/compile-coffeescript.js
-
 const fs = require('fs')
 const path = require('path')
 const { createRequire } = require('module')
@@ -92,11 +87,16 @@ ERROR: (Meanwhile, .civet files will not compile.)
   })
 }
 
+// Based on Meteor's CoffeeScript compiler implementation:
+// https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript-compiler/coffeescript-compiler.js
+// and CachedCoffeeScriptCompiler:
+// https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript/compile-coffeescript.js
+
 class CachedCivetCompiler extends CachingCompiler {
   constructor(options = {}) {
     super({
       compilerName: 'civet',
-      defaultCacheSize: 1024 * 1024 * 10
+      defaultCacheSize: 1024 * 1024 * 10,
     })
 
     this.civetCompiler = new CivetCompiler(options)
@@ -109,7 +109,7 @@ class CachedCivetCompiler extends CachingCompiler {
       inputFile.getDeclaredExports(),
       inputFile.getPathInPackage(),
       this.civetCompiler.getVersion(),
-      this.civetCompiler.getConfigCacheKey(inputFile)
+      this.civetCompiler.getConfigCacheKey(inputFile),
     ]
   }
 
@@ -162,24 +162,27 @@ class CivetCompiler {
   constructor() {
     this.babelCompiler = new BabelCompiler({
       runtime: false,
-      react: true
+      react: true,
     })
     this.configCache = new Map()
   }
 
   getVersion() {
-    return Civet?.version
+    return Civet.version
   }
 
   outputFilePath(inputFile) {
     return inputFile.getPathInPackage()
   }
 
-  getCompileOptions(inputFile) {
-    const configOptions = this.getConfigOptions(inputFile)
-    return {
+  async compileOneFile(inputFile) {
+    const source = inputFile.getContentsAsString()
+
+    const configEntry = this.getConfigEntry(inputFile)
+    const configOptions = configEntry?.options
+    const compileOptions = {
       ...configOptions,
-      parseOptions: configOptions.parseOptions
+      parseOptions: configOptions?.parseOptions
         ? { ...configOptions.parseOptions }
         : undefined,
       filename: inputFile.getDisplayPath(),
@@ -187,22 +190,6 @@ class CivetCompiler {
       sourceMap: true,
       js: true,
     }
-  }
-
-  async compileOneFile(inputFile) {
-    const configError = this.getConfigError(inputFile)
-    if (configError) {
-      inputFile.error({ message: configError })
-      return null
-    }
-
-    if (this.configError) {
-      inputFile.error({ message: this.configError })
-      return null
-    }
-
-    const source = inputFile.getContentsAsString()
-    const compileOptions = this.getCompileOptions(inputFile)
 
     let output
     try {
@@ -224,7 +211,7 @@ class CivetCompiler {
       const mergedSourceMap = this.mergeSourceMaps(
         babelResult.sourceMap,
         civetSourceMap,
-        inputFile
+        inputFile,
       )
       return {
         source: babelResult.data,
@@ -245,9 +232,7 @@ class CivetCompiler {
   }
 
   renderSourceMap(sourceMap, inputFile, compileOptions) {
-    if (!sourceMap) {
-      return null
-    }
+    if (!sourceMap) return null
 
     return sourceMap.json(
       inputFile.getDisplayPath(),
@@ -256,17 +241,12 @@ class CivetCompiler {
   }
 
   mergeSourceMaps(babelSourceMap, civetSourceMap, inputFile) {
-    if (!babelSourceMap) {
-      return civetSourceMap
-    }
-
-    if (!civetSourceMap) {
-      return babelSourceMap
-    }
+    if (!babelSourceMap) return civetSourceMap
+    if (!civetSourceMap) return babelSourceMap
 
     const normalizedBabelMap = {
       ...babelSourceMap,
-      sources: [...babelSourceMap.sources]
+      sources: [...babelSourceMap.sources],
     }
     normalizedBabelMap.sources[0] = '/' + this.outputFilePath(inputFile)
 
@@ -291,29 +271,17 @@ class CivetCompiler {
     }
 
     inputFile.error({
-      message: error && error.message ? error.message : String(error)
+      message: error?.message ? error.message : String(error)
     })
   }
 
   getConfigCacheKey(inputFile) {
-    const baseDir = this.getConfigBaseDir(inputFile)
-    const configEntry = this.configCache.get(baseDir)
-    return configEntry || null
-  }
-
-  getConfigOptions(inputFile) {
-    const configEntry = this.getConfigEntry(inputFile)
-    return configEntry.options || {}
-  }
-
-  getConfigError(inputFile) {
-    const configEntry = this.getConfigEntry(inputFile)
-    return configEntry.error
+    return this.getConfigEntry(inputFile) || null
   }
 
   getConfigEntry(inputFile) {
     const baseDir = this.getConfigBaseDir(inputFile)
-    return this.configCache.get(baseDir) || { options: {}, path: null, hash: null, error: null }
+    return this.configCache.get(baseDir)
   }
 
   getConfigBaseDir(inputFile) {
@@ -372,7 +340,11 @@ class CivetCompiler {
         configEntry.path = configPath
         configEntry.options = await CivetConfig.loadConfig(configPath)
       } catch (error) {
-        configEntry.error = `Error loading Civet config ${configPath}: ${error.message}`
+        console.error(`
+Error loading Civet config ${configPath}:
+${error.message}
+`)
+        configEntry.error = error
       }
     }
 

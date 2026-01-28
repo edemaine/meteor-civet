@@ -1,7 +1,7 @@
 Package.describe({
   name: 'edemaine:civet',
   summary: 'Civet language support for Meteor',
-  version: '0.1.0'
+  version: '0.0.0',
 })
 
 Package.registerBuildPlugin({
@@ -10,7 +10,7 @@ Package.registerBuildPlugin({
   sources: ['civet.js'],
   npmDependencies: {
     'source-map': '0.5.7'
-  }
+  },
 })
 
 Package.onUse(function (api) {
