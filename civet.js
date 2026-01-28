@@ -5,6 +5,7 @@ const Module = require('module')
 const { Babel, BabelCompiler } = require('meteor/babel-compiler')
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map')
 const { convertToOSPath } = Plugin
+const { Meteor } = require('meteor/meteor')
 
 // Resolve peer NPM dependency relative to the app's package.json,
 // which is generally assumed to be in the current working directory; see
@@ -125,10 +126,11 @@ class CachedCivetCompiler extends CachingCompiler {
     ]
   }
 
-  async processFilesForTarget(inputFiles) {
-    await this.civetCompiler.updateConfigs(inputFiles)
-
-    return super.processFilesForTarget(inputFiles)
+  processFilesForTarget(inputFiles) {
+    return this.civetCompiler.updateConfigs(inputFiles)
+    .then(Meteor.bindEnvironment(() =>
+      super.processFilesForTarget(inputFiles))
+    )
   }
 
   compileOneFileLater(inputFile, getResult) {
@@ -187,7 +189,7 @@ class CivetCompiler {
     return inputFile.getPathInPackage()
   }
 
-  async compileOneFile(inputFile) {
+  compileOneFile(inputFile) {
     const source = inputFile.getContentsAsString()
 
     const configEntry = this.getConfigEntry(inputFile)
@@ -205,7 +207,10 @@ class CivetCompiler {
 
     let output
     try {
-      output = await Civet.compile(source, compileOptions)
+      output = Civet.compile(source, {
+        ...compileOptions,
+        sync: true,
+      })
     } catch (error) {
       this.reportCompileError(inputFile, error)
       return null
@@ -319,21 +324,26 @@ class CivetCompiler {
     return process.cwd()
   }
 
-  async updateConfigs(inputFiles) {
-    if (!CivetConfig || !CivetConfig.findInDir || !CivetConfig.loadConfig) return
+  updateConfigs(inputFiles) {
+    if (!CivetConfig || !CivetConfig.findInDir || !CivetConfig.loadConfig) {
+      return Promise.resolve()
+    }
 
     // Load config for each unique base directory
+    const loads = []
     const roots = new Set()
     for (const inputFile of inputFiles) {
       const baseDir = this.getConfigBaseDir(inputFile)
       if (!roots.has(baseDir)) {
-        await this.updateConfig(baseDir, inputFile)
         roots.add(baseDir)
+        loads.push(this.updateConfig(baseDir, inputFile))
       }
     }
+
+    return Promise.all(loads)
   }
 
-  async updateConfig(baseDir, inputFile) {
+  updateConfig(baseDir, inputFile) {
     const configEntry = {
       options: {},
       path: null,
@@ -341,33 +351,39 @@ class CivetCompiler {
       error: null,
     }
 
-    let configPath
-    try {
-      configPath = await CivetConfig.findInDir(baseDir)
-    } catch (error) {
+    return CivetConfig.findInDir(baseDir)
+    .then(Meteor.bindEnvironment((configPath) => {
+      if (!configPath) {
+        this.configCache.set(baseDir, configEntry)
+        return null
+      }
+
+      const configFile = inputFile.readAndWatchFileWithHash(configPath)
+      configEntry.hash = configFile.hash
+      configEntry.path = configPath
+
+      return CivetConfig.loadConfig(configPath)
+      .then(Meteor.bindEnvironment((options) => {
+        configEntry.options = options
+        this.configCache.set(baseDir, configEntry)
+      }))
+      .catch(Meteor.bindEnvironment((error) => {
+        console.error(`
+  Error loading Civet config in ${baseDir}:
+  ${error.message}
+  `)
+        configEntry.error = error
+        this.configCache.set(baseDir, configEntry)
+      }))
+    }))
+    .catch(Meteor.bindEnvironment((error) => {
       console.error(`
 Error finding Civet config in ${baseDir}:
 ${error.message}
 `)
       configEntry.error = error
-    }
-
-    if (configPath) {
-      try {
-        const configFile = inputFile.readAndWatchFileWithHash(configPath)
-        configEntry.hash = configFile.hash
-        configEntry.path = configPath
-        configEntry.options = await CivetConfig.loadConfig(configPath)
-      } catch (error) {
-        console.error(`
-Error loading Civet config ${configPath}:
-${error.message}
-`)
-        configEntry.error = error
-      }
-    }
-
-    this.configCache.set(baseDir, configEntry)
+      this.configCache.set(baseDir, configEntry)
+    }))
   }
 }
 
