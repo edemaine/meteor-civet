@@ -18,7 +18,7 @@ const appRequire = createRequire(path.join(process.cwd(), 'package.json'))
 
 function peerRequire(name) {
   try {
-    return { module: appRequire(name) }
+    return appRequire(name)
   } catch (error) {
     // Meteor 2 uses an older Node.js that does not support modern JS syntax
     // used by Civet, such as `??=`. In this case, transpile with Babel.
@@ -37,48 +37,46 @@ function peerRequire(name) {
         compiledModule.filename = resolvedPath
         compiledModule.paths = Module._nodeModulePaths(path.dirname(resolvedPath))
         compiledModule._compile(compiled.code, resolvedPath)
-        return { module: compiledModule.exports }
+        return compiledModule.exports
       } catch (transpileError) {
-        return {
-          error: `edemaine:civet failed to transpile ${name} with Babel: ${transpileError.message}`
-        }
+        console.error(`
+edemaine:civet failed to transpile ${name} with Babel:
+${transpileError.message}
+`)
+        return { error: transpileError }
       }
     }
 
-    if (name === civetName) {
-      return {
-        error: `${error.message}
-ERROR: edemaine:civet is missing the peer NPM dependency ${civetName}
-ERROR: Install it in your app via: meteor npm install --save-dev ${civetName}
-ERROR: Then restart meteor
-`
-      }
-    }
-
-    return {
-      error: `edemaine:civet failed to load ${name}: ${error.message}`
-    }
+    console.error(`
+edemaine:civet failed to load module ${name}:
+${error.message}
+`)
+    return { error }
   }
 }
 
-let Civet, CivetConfig, CivetError
 const civetName = '@danielx/civet'
-
-Plugin.registerCompiler({
-  extensions: ['civet']
-}, () => {
-  ({module: Civet, error: CivetError} = peerRequire(civetName))
-
-  if (Civet) {
-    let error
-    ({module: CivetConfig, error} = peerRequire(`${civetName}/config`))
-    if (error) console.warn(`Failed to load ${civetName}/config: ${error}`)
-  } else {
-    console.error(CivetError)
+let Civet = peerRequire(civetName), CivetConfig
+if (Civet.error) {
+  if (Civet.error.code === "MODULE_NOT_FOUND") {
+    console.error(
+`ERROR: edemaine:civet is missing the peer NPM dependency ${civetName}
+ERROR: Install it in your app via: meteor npm install --save-dev ${civetName}
+ERROR: Then restart meteor
+ERROR: (Meanwhile, .civet files will not compile.)
+`)
+    Civet = undefined
   }
+} else {
+  CivetConfig = peerRequire(`${civetName}/config`)
+  if (CivetConfig.error) CivetConfig = undefined
 
-  return new CachedCivetCompiler()
-})
+  Plugin.registerCompiler({
+    extensions: ['civet']
+  }, () => {
+    return new CachedCivetCompiler()
+  })
+}
 
 class CachedCivetCompiler extends CachingCompiler {
   constructor(options = {}) {
@@ -178,11 +176,6 @@ class CivetCompiler {
   }
 
   async compileOneFile(inputFile) {
-    if (CivetError) {
-      inputFile.error({ message: CivetError })
-      return null
-    }
-
     const configError = this.getConfigError(inputFile)
     if (configError) {
       inputFile.error({ message: configError })
