@@ -65,7 +65,7 @@ ${error.message}
 }
 
 const civetName = '@danielx/civet'
-let Civet = peerRequire(civetName), CivetConfig
+let Civet = peerRequire(civetName), CivetConfig, CivetPackage
 if (Civet.error) {
   if (Civet.error.code === "MODULE_NOT_FOUND") {
     console.error(
@@ -77,6 +77,8 @@ ERROR: (Meanwhile, .civet files will not compile.)
     Civet = undefined
   }
 } else {
+  CivetPackage = peerRequire(`${civetName}/package.json`)
+  if (CivetPackage.error) CivetPackage = undefined
   CivetConfig = peerRequire(`${civetName}/config`)
   if (CivetConfig.error) CivetConfig = undefined
 
@@ -109,7 +111,7 @@ class CachedCivetCompiler extends CachingCompiler {
       inputFile.getDeclaredExports(),
       inputFile.getPathInPackage(),
       this.civetCompiler.getVersion(),
-      this.civetCompiler.getConfigCacheKey(inputFile),
+      ...this.civetCompiler.getConfigCacheKey(inputFile),
     ]
   }
 
@@ -168,7 +170,7 @@ class CivetCompiler {
   }
 
   getVersion() {
-    return Civet.version
+    return CivetPackage?.version
   }
 
   outputFilePath(inputFile) {
@@ -276,7 +278,12 @@ class CivetCompiler {
   }
 
   getConfigCacheKey(inputFile) {
-    return this.getConfigEntry(inputFile) || null
+    const configEntry = this.getConfigEntry(inputFile)
+    if (!configEntry) return null
+    return [
+      configEntry.path,
+      configEntry.hash,
+    ]
   }
 
   getConfigEntry(inputFile) {
