@@ -1,12 +1,12 @@
 Package.describe({
   name: 'edemaine:civet',
   summary: 'Civet language support for Meteor',
-  version: '0.0.0',
+  version: '0.0.1',
 })
 
 Package.registerBuildPlugin({
   name: 'civet',
-  use: ['caching-compiler@2.0.1', 'babel-compiler@7.6.2', 'ecmascript@0.12.7'],
+  use: ['caching-compiler@1.2.1||2.0.1', 'babel-compiler@7.6.2', 'ecmascript@0.12.7'],
   sources: ['civet.js'],
   npmDependencies: {
     'source-map': '0.5.7'
