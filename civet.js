@@ -203,14 +203,12 @@ class CivetCompiler {
       outputFilename: '/' + this.outputFilePath(inputFile),
       sourceMap: true,
       js: true,
+      sync: true,
     }
 
     let output
     try {
-      output = Civet.compile(source, {
-        ...compileOptions,
-        sync: true,
-      })
+      output = Civet.compile(source, compileOptions)
     } catch (error) {
       this.reportCompileError(inputFile, error)
       return null
