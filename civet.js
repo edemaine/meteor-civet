@@ -328,9 +328,11 @@ class CivetCompiler {
     try {
       configPath = await CivetConfig.findInDir(baseDir)
     } catch (error) {
-      configEntry.error = `Error finding Civet config: ${error.message}`
-      this.configCache.set(baseDir, configEntry)
-      return
+      console.error(`
+Error finding Civet config in ${baseDir}:
+${error.message}
+`)
+      configEntry.error = error
     }
 
     if (configPath) {
