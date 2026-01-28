@@ -23,27 +23,41 @@ function peerRequire(name) {
     // Meteor 2 uses an older Node.js that does not support modern JS syntax
     // used by Civet, such as `??=`. In this case, transpile with Babel.
     if (error instanceof SyntaxError) {
+      let resolvedPath, transpiled
       try {
-        const resolvedPath = appRequire.resolve(name)
+        resolvedPath = appRequire.resolve(name)
         const source = fs.readFileSync(resolvedPath, 'utf8')
         const babelOptions = Babel.getDefaultOptions({
           nodeMajorVersion: parseInt(process.versions.node, 10)
         })
         babelOptions.filename = resolvedPath
         babelOptions.sourceMaps = false
-        const compiled = Babel.compile(source, babelOptions)
+        transpiled = Babel.compile(source, babelOptions)
+      } catch (error) {
+        console.error(`
+edemaine:civet failed to transpile ${name} with Babel:
+${error.message}
+`)
+        return { error }
+      }
+      try {
         // Build module from transpiled code
         const compiledModule = new Module(resolvedPath, module.parent)
         compiledModule.filename = resolvedPath
         compiledModule.paths = Module._nodeModulePaths(path.dirname(resolvedPath))
-        compiledModule._compile(compiled.code, resolvedPath)
+        if (require.cache) {
+          require.cache[resolvedPath] = compiledModule
+        } else if (Module._cache) {
+          Module._cache[resolvedPath] = compiledModule
+        }
+        compiledModule._compile(transpiled.code, resolvedPath)
         return compiledModule.exports
-      } catch (transpileError) {
+      } catch (error) {
         console.error(`
-edemaine:civet failed to transpile ${name} with Babel:
-${transpileError.message}
+edemaine:civet failed to load transpiled ${name}:
+${error.message}
 `)
-        return { error: transpileError }
+        return { error }
       }
     }
 
