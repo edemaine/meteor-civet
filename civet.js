@@ -11,6 +11,8 @@ const { convertToOSPath } = Plugin
 // https://github.com/meteor/meteor/blob/devel/packages/babel-compiler/babel-compiler.js
 const appRequire = createRequire(path.join(process.cwd(), 'package.json'))
 
+// Returns { $error: errorObject } on failure.
+// (This will break if the package has its own $error field.)
 function peerRequire(name) {
   try {
     return appRequire(name)
@@ -33,7 +35,7 @@ function peerRequire(name) {
 edemaine:civet failed to transpile ${name} with Babel:
 ${error.message}
 `)
-        return { error }
+        return { $error: error }
       }
       try {
         // Build module from transpiled code
@@ -52,7 +54,7 @@ ${error.message}
 edemaine:civet failed to load transpiled ${name}:
 ${error.message}
 `)
-        return { error }
+        return { $error: error }
       }
     }
 
@@ -60,14 +62,14 @@ ${error.message}
 edemaine:civet failed to load module ${name}:
 ${error.message}
 `)
-    return { error }
+    return { $error: error }
   }
 }
 
 const civetName = '@danielx/civet'
 let Civet = peerRequire(civetName), CivetConfig, CivetVersion
-if (Civet.error) {
-  if (Civet.error.code === "MODULE_NOT_FOUND") {
+if (Civet.$error) {
+  if (Civet.$error.code === "MODULE_NOT_FOUND") {
     console.error(
 `ERROR: edemaine:civet is missing the peer NPM dependency ${civetName}
 ERROR: Install it in your app via: meteor npm install --save-dev ${civetName}
@@ -78,7 +80,7 @@ ERROR: (Meanwhile, .civet files will not compile.)
   }
 } else {
   CivetConfig = peerRequire(`${civetName}/config`)
-  if (CivetConfig.error) CivetConfig = undefined
+  if (CivetConfig.$error) CivetConfig = undefined
 
   try {
     const civetPackage = appRequire(`${civetName}/package.json`)
