@@ -1,4 +1,7 @@
 export civetAnswer := 42
 
+// Test coffeeBooleans option set by package.json
+export civetBool := yes
+
 export function civetAdd(a, b)
   a + b

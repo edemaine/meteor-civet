@@ -1,5 +1,10 @@
 {
   "devDependencies": {
     "@danielx/civet": "^0.11.2"
+  },
+  "civetConfig": {
+    "parseOptions": {
+      "coffeeBooleans": true
+    }
   }
 }
