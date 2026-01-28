@@ -18,6 +18,11 @@ Note that the Civet compiler `@danielx/civet` is a
 so that you can control which version to install.
 But that means you need to install it yourself.
 
+This package offers broad compatibility with Meteor versions 2 and 3.
+In particular, for older Meteor releases that ship an older Node.js,
+Babel transpiles the Civet compiler itself,
+so that it runs despite modern JavaScript syntax.
+
 ## References
 
 This implementation is based on Meteor's CoffeeScript compiler,
