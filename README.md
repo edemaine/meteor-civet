@@ -1,29 +1,40 @@
 # edemaine:civet
 
-Compile `.civet` files in Meteor apps using Civet.
+## Civet in Meteor
 
-## Install
+This [Meteor](https://www.meteor.com/) package lets you write code in
+[Civet](https://civet.dev/) in `.civet` files, and automatically compiles
+them to JavaScript.
+
+## Installation
 
 ```bash
 meteor add edemaine:civet
 meteor npm install --save-dev @danielx/civet
 ```
 
-## Notes
-
-- Civet is a peer npm dependency so you control its version.
-- Compiled output is run through Meteor's Babel compiler for browser targets.
+Note that the Civet compiler `@danielx/civet` is a
+[peer NPM dependency](https://guide.meteor.com/using-atmosphere-packages.html#peer-npm-dependencies),
+so that you can control which version to install.
+But that means you need to install it yourself.
 
 ## References
 
-- Meteor CoffeeScript compiler (basis for this compiler flow):
-  https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript-compiler/coffeescript-compiler.js
-- Meteor CoffeeScript compiler plugin registration:
-  https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript/compile-coffeescript.js
+This implementation is based on Meteor's CoffeeScript compiler,
+which is [MIT licensed](https://github.com/meteor/meteor/blob/devel/LICENSE):
 
-## Test
+- https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript-compiler/coffeescript-compiler.js
+- https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript/compile-coffeescript.js
+
+## Testing
 
 ```bash
 npm install
 meteor test-packages ./
 ```
+
+## Future Work
+
+Civet actually supports (and compiles to) TypeScript.
+Ideally we would integrate with Meteor's TypeScript support, such as
+[zodern:types](https://github.com/zodern/meteor-types).
