@@ -65,7 +65,7 @@ ${error.message}
 }
 
 const civetName = '@danielx/civet'
-let Civet = peerRequire(civetName), CivetConfig, CivetPackage
+let Civet = peerRequire(civetName), CivetConfig, CivetVersion
 if (Civet.error) {
   if (Civet.error.code === "MODULE_NOT_FOUND") {
     console.error(
@@ -77,10 +77,18 @@ ERROR: (Meanwhile, .civet files will not compile.)
     Civet = undefined
   }
 } else {
-  CivetPackage = peerRequire(`${civetName}/package.json`)
-  if (CivetPackage.error) CivetPackage = undefined
   CivetConfig = peerRequire(`${civetName}/config`)
   if (CivetConfig.error) CivetConfig = undefined
+
+  try {
+    const civetPackage = appRequire(`${civetName}/package.json`)
+    CivetVersion = civetPackage.version
+  } catch (error) {
+    console.error(`
+edemaine:civet failed to load version from ${civetName}/package.json:
+${error.message}
+`)
+  }
 
   Plugin.registerCompiler({
     extensions: ['civet']
@@ -170,7 +178,7 @@ class CivetCompiler {
   }
 
   getVersion() {
-    return CivetPackage?.version
+    return CivetVersion
   }
 
   outputFilePath(inputFile) {
