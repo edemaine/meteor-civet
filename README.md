@@ -6,6 +6,16 @@ This [Meteor](https://www.meteor.com/) package lets you write code in
 [Civet](https://civet.dev/) in `.civet` files, and automatically compiles
 them to JavaScript.
 
+For context:
+
+* [Civet](https://civet.dev/) is a modern successor to CoffeeScript
+  that is roughly a superset of TypeScript,
+  plus many other features and syntax, and
+  which compiles to TypeScript/JavaScript.
+* [Meteor](https://www.meteor.com/) is an (aging)
+  full-stack JavaScript framework with powerful real-time data synchronization.
+  I use it to build [Cosuite](https://github.com/edemaine/cosuite).
+
 ## Installation
 
 ```bash
