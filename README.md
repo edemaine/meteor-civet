@@ -45,6 +45,17 @@ npm install
 meteor test-packages ./
 ```
 
+## Release Process
+
+* v0.x.x releases are for Meteor 2
+* v1.x.x releases are for Meteor 3
+
+1. Increment both version tracks in `package.js`.
+2. `git commit -a`
+3. `npm run publish`, or separately:
+   * `npm run publish:2` to release for Meteor 2
+   * `npm run publish:3` to release for Meteor 3
+
 ## Future Work
 
 Civet actually supports (and compiles to) TypeScript.

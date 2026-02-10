@@ -1,7 +1,19 @@
+const versions = {
+  2: '0.0.4',
+  3: '1.0.4',
+}
+
+const meteorVersion = process.env.METEOR_VERSION || '3'
+const version = versions[meteorVersion]
+
+if (!version) {
+  throw new Error(`Unknown METEOR_VERSION="${meteorVersion}". Use 2 or 3.`)
+}
+
 Package.describe({
   name: 'edemaine:civet',
   summary: 'Civet language support for Meteor',
-  version: '0.0.3',
+  version,
 })
 
 Package.registerBuildPlugin({
