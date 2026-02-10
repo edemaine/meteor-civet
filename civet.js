@@ -5,7 +5,6 @@ const Module = require('module')
 const { Babel, BabelCompiler } = require('meteor/babel-compiler')
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map')
 const { convertToOSPath } = Plugin
-const { Meteor } = require('meteor/meteor')
 
 // Resolve peer NPM dependency relative to the app's package.json,
 // which is generally assumed to be in the current working directory; see
@@ -126,11 +125,10 @@ class CachedCivetCompiler extends CachingCompiler {
     ]
   }
 
-  processFilesForTarget(inputFiles) {
-    return this.civetCompiler.updateConfigs(inputFiles)
-    .then(Meteor.bindEnvironment(() =>
-      super.processFilesForTarget(inputFiles))
-    )
+  async processFilesForTarget(inputFiles) {
+    await this.civetCompiler.updateConfigs(inputFiles)
+
+    return super.processFilesForTarget(inputFiles)
   }
 
   compileOneFileLater(inputFile, getResult) {
@@ -189,7 +187,7 @@ class CivetCompiler {
     return inputFile.getPathInPackage()
   }
 
-  compileOneFile(inputFile) {
+  async compileOneFile(inputFile) {
     const source = inputFile.getContentsAsString()
 
     const configEntry = this.getConfigEntry(inputFile)
@@ -203,12 +201,11 @@ class CivetCompiler {
       outputFilename: '/' + this.outputFilePath(inputFile),
       sourceMap: true,
       js: true,
-      sync: true,
     }
 
     let output
     try {
-      output = Civet.compile(source, compileOptions)
+      output = await Civet.compile(source, compileOptions)
     } catch (error) {
       this.reportCompileError(inputFile, error)
       return null
@@ -322,26 +319,21 @@ class CivetCompiler {
     return process.cwd()
   }
 
-  updateConfigs(inputFiles) {
-    if (!CivetConfig || !CivetConfig.findInDir || !CivetConfig.loadConfig) {
-      return Promise.resolve()
-    }
+  async updateConfigs(inputFiles) {
+    if (!CivetConfig || !CivetConfig.findInDir || !CivetConfig.loadConfig) return
 
     // Load config for each unique base directory
-    const loads = []
     const roots = new Set()
     for (const inputFile of inputFiles) {
       const baseDir = this.getConfigBaseDir(inputFile)
       if (!roots.has(baseDir)) {
+        await this.updateConfig(baseDir, inputFile)
         roots.add(baseDir)
-        loads.push(this.updateConfig(baseDir, inputFile))
       }
     }
-
-    return Promise.all(loads)
   }
 
-  updateConfig(baseDir, inputFile) {
+  async updateConfig(baseDir, inputFile) {
     const configEntry = {
       options: {},
       path: null,
@@ -349,39 +341,33 @@ class CivetCompiler {
       error: null,
     }
 
-    return CivetConfig.findInDir(baseDir)
-    .then(Meteor.bindEnvironment((configPath) => {
-      if (!configPath) {
-        this.configCache.set(baseDir, configEntry)
-        return null
-      }
-
-      const configFile = inputFile.readAndWatchFileWithHash(configPath)
-      configEntry.hash = configFile.hash
-      configEntry.path = configPath
-
-      return CivetConfig.loadConfig(configPath)
-      .then(Meteor.bindEnvironment((options) => {
-        configEntry.options = options
-        this.configCache.set(baseDir, configEntry)
-      }))
-      .catch(Meteor.bindEnvironment((error) => {
-        console.error(`
-  Error loading Civet config in ${baseDir}:
-  ${error.message}
-  `)
-        configEntry.error = error
-        this.configCache.set(baseDir, configEntry)
-      }))
-    }))
-    .catch(Meteor.bindEnvironment((error) => {
+    let configPath
+    try {
+      configPath = await CivetConfig.findInDir(baseDir)
+    } catch (error) {
       console.error(`
 Error finding Civet config in ${baseDir}:
 ${error.message}
 `)
       configEntry.error = error
-      this.configCache.set(baseDir, configEntry)
-    }))
+    }
+
+    if (configPath) {
+      try {
+        const configFile = inputFile.readAndWatchFileWithHash(configPath)
+        configEntry.hash = configFile.hash
+        configEntry.path = configPath
+        configEntry.options = await CivetConfig.loadConfig(configPath)
+      } catch (error) {
+        console.error(`
+Error loading Civet config ${configPath}:
+${error.message}
+`)
+        configEntry.error = error
+      }
+    }
+
+    this.configCache.set(baseDir, configEntry)
   }
 }
 
