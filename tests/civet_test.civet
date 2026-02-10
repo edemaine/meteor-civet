@@ -1,5 +1,10 @@
 export civetAnswer := 42
 
+export function getAnswer()
+  comptime
+    console.log "!! This message should not appear during testing."
+    2*21
+
 // Test coffeeBooleans option set by package.json
 export civetBool := yes
 

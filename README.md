@@ -23,6 +23,13 @@ In particular, for older Meteor releases that ship an older Node.js,
 Babel transpiles the Civet compiler itself,
 so that it runs despite modern JavaScript syntax.
 
+## Details
+
+* Automatically enables
+  [`comptime` blocks](https://civet.dev/reference#comptime-blocks)
+* Uses Civet's built-in TypeScript-to-JavaScript compilation.
+  This supports most but not all TypeScript features.
+
 ## References
 
 This implementation is based on Meteor's CoffeeScript compiler,

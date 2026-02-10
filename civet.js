@@ -194,9 +194,11 @@ class CivetCompiler {
     const configOptions = configEntry?.options
     const compileOptions = {
       ...configOptions,
-      parseOptions: configOptions?.parseOptions
-        ? { ...configOptions.parseOptions }
-        : undefined,
+      parseOptions: {
+        // Allow comptime by default
+        comptime: true,
+        ...configOptions.parseOptions,
+      },
       filename: inputFile.getDisplayPath(),
       outputFilename: '/' + this.outputFilePath(inputFile),
       sourceMap: true,
