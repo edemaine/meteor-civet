@@ -40,6 +40,11 @@ so that it runs despite modern JavaScript syntax.
 * Uses Civet's built-in TypeScript-to-JavaScript compilation.
   This supports most but not all TypeScript features.
 
+## Example
+
+For an example Meteor app using Civet, see
+[meteor-civet-test-react](https://github.com/edemaine/meteor-civet-test-react).
+
 ## References
 
 This implementation is based on Meteor's CoffeeScript compiler,
