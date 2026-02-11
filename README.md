@@ -77,6 +77,16 @@ npm install
 meteor test-packages ./
 ```
 
+## Troubleshooting
+
+If you're having weird compilation issues
+(particularly during development, or perhaps when upgrading `edemaine:civet`),
+clear the cache and restart Meteor:
+
+```bash
+rm -rf .meteor/local/plugin-cache/edemaine_civet
+```
+
 ## Release Process
 
 This package publishes two release tracks:
