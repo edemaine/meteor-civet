@@ -208,10 +208,8 @@ class CivetCompiler {
       this.babelCompiler = new BabelCompiler(babelFeatures, (babelOptions, inputFile) => {
         // Meteor's TypeScript pre-pass only runs for .ts/.tsx filenames.
         // Civet emits TypeScript, so give Babel a virtual .tsx filename.
-        if (inputFile.getPathInPackage().endsWith('.civet')) {
-          babelOptions.sourceFileName = inputFile.getPathInPackage()
-          babelOptions.filename = babelOptions.filename + '.tsx'
-        }
+        babelOptions.sourceFileName = inputFile.getPathInPackage()
+        babelOptions.filename = `${inputFile.getPathInPackage()}.tsx`
 
         if (globalThis.modifyBabelConfig) {
           globalThis.modifyBabelConfig(babelOptions, inputFile)
