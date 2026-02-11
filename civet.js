@@ -183,8 +183,16 @@ class CivetCompiler {
 
   getBabelFeatures() {
     return {
+      // Like Meteor's CoffeeScriptCompiler, prevent Babel from
+      // importing helpers, in case we don't have the `modules` package,
+      // so `require` may not exist.
       runtime: false,
-      ...(globalThis.babelFeatures || { react: true }),
+      // Civet supports JSX, so enable React transforms by default.
+      react: true,
+      // edemaine:solid will override to `react: false` here.
+      ...globalThis.babelFeatures,
+      // Civet outputs TypeScript, so we need Babel to transpile it.
+      typescript: true,
     }
   }
 
@@ -198,6 +206,13 @@ class CivetCompiler {
 
     if (!this.babelCompiler || this.babelFeaturesCacheKey !== babelFeaturesCacheKey) {
       this.babelCompiler = new BabelCompiler(babelFeatures, (babelOptions, inputFile) => {
+        // Meteor's TypeScript pre-pass only runs for .ts/.tsx filenames.
+        // Civet emits TypeScript, so give Babel a virtual .tsx filename.
+        if (inputFile.getPathInPackage().endsWith('.civet')) {
+          babelOptions.sourceFileName = inputFile.getPathInPackage()
+          babelOptions.filename = babelOptions.filename + '.tsx'
+        }
+
         if (globalThis.modifyBabelConfig) {
           globalThis.modifyBabelConfig(babelOptions, inputFile)
         }
@@ -235,7 +250,6 @@ class CivetCompiler {
       filename: inputFile.getDisplayPath(),
       outputFilename: '/' + this.outputFilePath(inputFile),
       sourceMap: true,
-      js: true,
     }
 
     let output

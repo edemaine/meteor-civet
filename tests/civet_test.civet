@@ -1,6 +1,8 @@
 export civetAnswer := 42
 
-export function getAnswer()
+// Test TypeScript annotations get removed
+export function getAnswer(): number
+  // Test comptime support
   comptime
     console.log "!! This message should not appear during testing."
     2*21
