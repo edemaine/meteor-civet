@@ -2,6 +2,7 @@ const fs = require('fs')
 const path = require('path')
 const { createRequire } = require('module')
 const Module = require('module')
+const { Meteor } = require('meteor/meteor')
 const { Babel, BabelCompiler } = require('meteor/babel-compiler')
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map')
 const { convertToOSPath } = Plugin
@@ -105,13 +106,13 @@ ${error.message}
 // https://github.com/meteor/meteor/blob/devel/packages/non-core/coffeescript/compile-coffeescript.js
 
 class CachedCivetCompiler extends CachingCompiler {
-  constructor(options = {}) {
+  constructor() {
     super({
       compilerName: 'civet',
       defaultCacheSize: 1024 * 1024 * 10,
     })
 
-    this.civetCompiler = new CivetCompiler(options)
+    this.civetCompiler = new CivetCompiler()
   }
 
   getCacheKey(inputFile) {
@@ -121,6 +122,7 @@ class CachedCivetCompiler extends CachingCompiler {
       inputFile.getDeclaredExports(),
       inputFile.getPathInPackage(),
       this.civetCompiler.getVersion(),
+      this.civetCompiler.getBabelFeaturesCacheKey(),
       ...this.civetCompiler.getConfigCacheKey(inputFile),
     ]
   }
@@ -172,11 +174,23 @@ class CachedCivetCompiler extends CachingCompiler {
 
 class CivetCompiler {
   constructor() {
-    this.babelCompiler = new BabelCompiler({
+    const babelFeatures = {
       runtime: false,
-      react: true,
+      ...(Meteor.babelFeatures || { react: true }),
+    }
+
+    this.babelFeaturesCacheKey = JSON.stringify(babelFeatures)
+    this.babelCompiler = new BabelCompiler(babelFeatures, (babelOptions, inputFile) => {
+      if (Meteor.modifyBabelConfig) {
+        Meteor.modifyBabelConfig(babelOptions, inputFile)
+      }
     })
+
     this.configCache = new Map()
+  }
+
+  getBabelFeaturesCacheKey() {
+    return this.babelFeaturesCacheKey
   }
 
   getVersion() {
@@ -240,9 +254,7 @@ class CivetCompiler {
   }
 
   setDiskCacheDirectory(cacheDir) {
-    if (this.babelCompiler && this.babelCompiler.setDiskCacheDirectory) {
-      this.babelCompiler.setDiskCacheDirectory(cacheDir)
-    }
+    this.babelCompiler.setDiskCacheDirectory(cacheDir)
   }
 
   renderSourceMap(sourceMap, inputFile, compileOptions) {
