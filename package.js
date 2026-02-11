@@ -1,6 +1,6 @@
 const versions = {
-  2: '0.0.4',
-  3: '1.0.4',
+  2: '0.1.0',
+  3: '1.1.0',
 }
 
 const meteorVersion = process.env.METEOR_VERSION || '3'
