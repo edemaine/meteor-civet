@@ -56,10 +56,12 @@ together to support `.civet` files with Solid JSX.
 
 The protocol is defined by two optional properties on `Meteor`:
 
-* `Meteor.babelFeatures`: object merged into the `extraFeatures` argument
-  passed to `new BabelCompiler(...)`
-* `Meteor.modifyBabelConfig(babelOptions, inputFile)`: callback for mutating
-  Babel options on a per-file basis
+* `globalThis.babelFeatures`: object merged into the `extraFeatures`
+  first argument passed to `new BabelCompiler(...)`
+* `globalThis.modifyBabelConfig(babelOptions, inputFile)`:
+  callback for mutating Babel options on a per-file basis
+
+See [further details](https://github.com/edemaine/meteor-solid#babel-customization-protocol).
 
 ## References
 

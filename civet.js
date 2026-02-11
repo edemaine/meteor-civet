@@ -2,7 +2,6 @@ const fs = require('fs')
 const path = require('path')
 const { createRequire } = require('module')
 const Module = require('module')
-const { Meteor } = require('meteor/meteor')
 const { Babel, BabelCompiler } = require('meteor/babel-compiler')
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map')
 const { convertToOSPath } = Plugin
@@ -175,7 +174,7 @@ class CachedCivetCompiler extends CachingCompiler {
 class CivetCompiler {
   constructor() {
     // We lazily build the BabelCompiler, to give a chance for other packages
-    // to set the `Meteor.babelFeatures`/`Meteor.modifyBabelConfig` protocol.
+    // to set the `babelFeatures`/`modifyBabelConfig` protocol.
     this.babelCompiler = undefined
     this.babelFeaturesCacheKey = undefined
     this.babelCacheDirectory = undefined
@@ -185,7 +184,7 @@ class CivetCompiler {
   getBabelFeatures() {
     return {
       runtime: false,
-      ...(Meteor.babelFeatures || { react: true }),
+      ...(globalThis.babelFeatures || { react: true }),
     }
   }
 
@@ -199,8 +198,8 @@ class CivetCompiler {
 
     if (!this.babelCompiler || this.babelFeaturesCacheKey !== babelFeaturesCacheKey) {
       this.babelCompiler = new BabelCompiler(babelFeatures, (babelOptions, inputFile) => {
-        if (Meteor.modifyBabelConfig) {
-          Meteor.modifyBabelConfig(babelOptions, inputFile)
+        if (globalThis.modifyBabelConfig) {
+          globalThis.modifyBabelConfig(babelOptions, inputFile)
         }
       })
       this.babelFeaturesCacheKey = babelFeaturesCacheKey
